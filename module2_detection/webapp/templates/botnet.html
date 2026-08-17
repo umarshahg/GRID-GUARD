@@ -1,0 +1,207 @@
+<!-- webapp/templates/botnet.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRID GUARD — Botnet Detection</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <a href="/dashboard" class="sidebar-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"/></svg>
+        </div>
+        <div class="brand-text">
+          <h2>GRID GUARD</h2>
+          <span>Defense System</span>
+        </div>
+      </a>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Monitoring</div>
+        <a href="/dashboard" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        <a href="/traffic" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Traffic Monitor
+        </a>
+        <a href="/botnet" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Botnet Detection
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">System</div>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Sandbox Env
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          IDS/IPS Responses
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          Settings
+        </a>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">{{ user.name[0] }}</div>
+        <div class="user-details">
+          <div class="user-name">{{ user.name }}</div>
+          <div class="user-role">{{ user.role }}</div>
+        </div>
+      </div>
+      <a href="/logout" class="btn-logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </a>
+    </div>
+  </nav>
+
+  <!-- ── Main ── -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>AI Botnet Detection Model</h1>
+        <p>Random Forest &amp; Isolation Forest Ensemble</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <div class="status-dot" id="model-dot"></div>
+          <span id="model-status-text">Model Status: Online</span>
+        </div>
+        <button class="btn btn-primary" id="rescore-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Re-Score
+        </button>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- Top Metrics -->
+      <div class="stat-grid fade-in">
+        <div class="stat-card green fade-in-1">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="stat-label">Accuracy</div>
+          <div class="stat-value" id="b-accuracy">—</div>
+          <div class="stat-sub" id="b-f1-sub">F1 Score: —</div>
+        </div>
+        <div class="stat-card cyan fade-in-2">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="stat-label">Legitimate</div>
+          <div class="stat-value" id="b-normal">—</div>
+          <div class="stat-sub">normal flows classified</div>
+        </div>
+        <div class="stat-card red fade-in-3">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg></div>
+          <div class="stat-label">Suspicious</div>
+          <div class="stat-value" id="b-botnet">—</div>
+          <div class="stat-sub">botnet signatures detected</div>
+        </div>
+        <div class="stat-card amber fade-in-4">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <div class="stat-label">Avg Inference</div>
+          <div class="stat-value">~12ms</div>
+          <div class="stat-sub">per flow scoring</div>
+        </div>
+      </div>
+
+      <!-- Anomaly Chart + Feature Importance -->
+      <div class="mb-24">
+        <div class="card fade-in" style="width:100%">
+          <div class="card-header">
+            <span class="card-title">Anomaly Detection Score (Isolation Forest)</span>
+            <span style="font-size:0.68rem; color:var(--text-muted); font-family:'Source Code Pro',monospace;">Scores above threshold trigger IDS/IPS Response</span>
+          </div>
+          <div class="chart-wrap" style="height:240px;">
+            <canvas id="anomaly-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model Weights -->
+      <div class="card mb-24 fade-in">
+        <div class="card-header">
+          <span class="card-title">Ensemble Model Weights</span>
+          <span style="font-size:0.68rem; color:var(--text-muted); font-family:'Source Code Pro',monospace;">Weighted aggregation → Risk Score 0–100%</span>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:8px;">
+          <div style="text-align:center; padding:16px; background:var(--bg-base); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-family:'Rajdhani',sans-serif; font-size:1.8rem; font-weight:700; color:var(--accent-cyan);">20%</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); font-family:'Source Code Pro',monospace; margin-top:4px;">Isolation Forest</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Unsupervised</div>
+          </div>
+          <div style="text-align:center; padding:16px; background:var(--bg-base); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-family:'Rajdhani',sans-serif; font-size:1.8rem; font-weight:700; color:var(--accent-teal);">15%</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); font-family:'Source Code Pro',monospace; margin-top:4px;">One-Class SVM</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Unsupervised</div>
+          </div>
+          <div style="text-align:center; padding:16px; background:var(--bg-base); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-family:'Rajdhani',sans-serif; font-size:1.8rem; font-weight:700; color:var(--accent-amber);">30%</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); font-family:'Source Code Pro',monospace; margin-top:4px;">Random Forest</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Supervised</div>
+          </div>
+          <div style="text-align:center; padding:16px; background:var(--bg-base); border-radius:8px; border:1px solid var(--border);">
+            <div style="font-family:'Rajdhani',sans-serif; font-size:1.8rem; font-weight:700; color:var(--accent-green);">35%</div>
+            <div style="font-size:0.7rem; color:var(--text-muted); font-family:'Source Code Pro',monospace; margin-top:4px;">XGBoost</div>
+            <div style="font-size:0.65rem; color:var(--text-muted); margin-top:2px;">Supervised</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detection Results Table -->
+      <div class="card fade-in">
+        <div class="card-header">
+          <span class="card-title">Detection Results — Scored Flows</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="flow-count-select" style="background:var(--bg-input); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; padding:4px 8px; font-size:0.75rem; font-family:'Source Code Pro',monospace; outline:none;">
+              <option value="25">25 flows</option>
+              <option value="50" selected>50 flows</option>
+              <option value="100">100 flows</option>
+              <option value="200">200 flows</option>
+            </select>
+            <button class="btn btn-outline" style="padding:4px 10px; font-size:0.7rem;" id="load-flows-btn">Load</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Flow ID</th>
+                <th>Risk Score</th>
+                <th>Tier</th>
+                <th>Action</th>
+                <th>Predicted</th>
+                <th>Actual</th>
+                <th>RF Score</th>
+                <th>IF Score</th>
+              </tr>
+            </thead>
+            <tbody id="b-flows-table-body">
+              <tr><td colspan="8"><div class="loading"><div class="spinner"></div><span>Loading detection results...</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/botnet.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!-- webapp/templates/dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRID GUARD — Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-layout">
+ 
+  <!-- ── Sidebar ── -->
+  {% include '_sidebar.html' ignore missing %}
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <a href="/dashboard" class="sidebar-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"/></svg>
+        </div>
+        <div class="brand-text">
+          <h2>GRID GUARD</h2>
+          <span>Defense System</span>
+        </div>
+      </a>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Monitoring</div>
+        <a href="/dashboard" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        <a href="/traffic" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Traffic Monitor
+        </a>
+        <a href="/botnet" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Botnet Detection
+          <span class="nav-badge" id="sb-alert-count">—</span>
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">System</div>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Sandbox Env
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          IDS/IPS Responses
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          Settings
+        </a>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar" id="user-avatar">A</div>
+        <div class="user-details">
+          <div class="user-name" id="user-name">{{ user.name }}</div>
+          <div class="user-role" id="user-role">{{ user.role }}</div>
+        </div>
+      </div>
+      <a href="/logout" class="btn-logout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Sign Out
+      </a>
+    </div>
+  </nav>
+ 
+  <!-- ── Main ── -->
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>Smart Grid Security Overview</h1>
+        <p>End-to-end monitoring from Smart Meters to Sandbox</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <div class="status-dot" id="system-dot"></div>
+          <span id="system-status-text">Connecting...</span>
+        </div>
+        <button class="btn btn-primary" id="scan-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Scan Meter
+        </button>
+      </div>
+    </div>
+ 
+    <div class="page-body">
+ 
+      <!-- Stat Cards -->
+      <div class="stat-grid fade-in">
+        <div class="stat-card cyan fade-in-1">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></div>
+          <div class="stat-label">Total Flows</div>
+          <div class="stat-value" id="total-flows">—</div>
+          <div class="stat-sub">test set flows</div>
+        </div>
+        <div class="stat-card green fade-in-2">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="stat-label">Normal Traffic</div>
+          <div class="stat-value" id="total-normal">—</div>
+          <div class="stat-sub">correctly classified</div>
+        </div>
+        <div class="stat-card red fade-in-3">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="stat-label">Botnet Detected</div>
+          <div class="stat-value" id="total-botnet">—</div>
+          <div class="stat-sub">attack flows found</div>
+        </div>
+        <div class="stat-card green fade-in-4">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="stat-label">Detection Rate</div>
+          <div class="stat-value" id="detection-rate">—</div>
+          <div class="stat-sub">target &gt;95%</div>
+        </div>
+        <div class="stat-card amber fade-in-1">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div class="stat-label">False Positive Rate</div>
+          <div class="stat-value" id="fpr">—</div>
+          <div class="stat-sub">target &lt;2%</div>
+        </div>
+        <div class="stat-card cyan fade-in-2">
+          <div class="stat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+          <div class="stat-label">F1 Score</div>
+          <div class="stat-value" id="f1-score">—</div>
+          <div class="stat-sub">target &gt;0.95</div>
+        </div>
+      </div>
+ 
+      <!-- Scan Result -->
+      <div class="scan-result" id="scan-result">
+        <div class="scan-result-header">
+          <span class="scan-meter-id" id="scan-meter-id">—</span>
+          <span class="label-pill" id="scan-status">—</span>
+        </div>
+        <div class="scan-risk-score" id="scan-risk">—%</div>
+        <div style="display:flex; gap:16px; flex-wrap:wrap;">
+          <div class="metric-row" style="flex:1; border:none; padding:0;">
+            <span class="metric-name">Tier</span>
+            <span class="metric-value info" id="scan-tier">—</span>
+          </div>
+          <div class="metric-row" style="flex:1; border:none; padding:0;">
+            <span class="metric-name">Action</span>
+            <span class="metric-value" id="scan-action" style="font-size:0.75rem;">—</span>
+          </div>
+          <div class="metric-row" style="flex:1; border:none; padding:0;">
+            <span class="metric-name">RF Score</span>
+            <span class="metric-value info" id="scan-rf">—</span>
+          </div>
+        </div>
+      </div>
+ 
+      <!-- Charts Row 1 -->
+      <div class="chart-grid mb-24">
+        <div class="card fade-in">
+          <div class="card-header">
+            <span class="card-title">Risk Score Distribution</span>
+            <span class="card-action">Live</span>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="histogram-chart"></canvas>
+          </div>
+        </div>
+        <div class="card fade-in">
+          <div class="card-header">
+            <span class="card-title">AI Classification</span>
+          </div>
+          <div class="chart-wrap" style="height:180px;">
+            <canvas id="donut-chart"></canvas>
+          </div>
+          <div style="display:flex; justify-content:center; gap:20px; margin-top:8px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <div style="width:10px;height:10px;border-radius:50%;background:var(--accent-green);"></div>
+              <span style="font-size:0.72rem; color:var(--text-secondary);">Normal</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <div style="width:10px;height:10px;border-radius:50%;background:var(--accent-red);"></div>
+              <span style="font-size:0.72rem; color:var(--text-secondary);">Botnet</span>
+            </div>
+          </div>
+        </div>
+      </div>
+ 
+      <!-- Charts Row 2 -->
+      <div class="chart-grid-2 mb-24">
+ 
+        <!-- Confusion Matrix -->
+        <div class="card fade-in">
+          <div class="card-header">
+            <span class="card-title">Confusion Matrix</span>
+          </div>
+          <div class="cm-grid">
+            <div class="cm-cell tn">
+              <div class="cm-value" id="cm-tn">—</div>
+              <div class="cm-label">True Negative</div>
+            </div>
+            <div class="cm-cell fp">
+              <div class="cm-value" id="cm-fp">—</div>
+              <div class="cm-label">False Positive</div>
+            </div>
+            <div class="cm-cell fn">
+              <div class="cm-value" id="cm-fn">—</div>
+              <div class="cm-label">False Negative</div>
+            </div>
+            <div class="cm-cell tp">
+              <div class="cm-value" id="cm-tp">—</div>
+              <div class="cm-label">True Positive</div>
+            </div>
+          </div>
+        </div>
+ 
+        <!-- Tier Distribution -->
+        <div class="card fade-in">
+          <div class="card-header">
+            <span class="card-title">Response Tier Distribution</span>
+          </div>
+          <div class="tier-list">
+            <div class="tier-row">
+              <span class="tier-badge t1">T1</span>
+              <div class="tier-bar-wrap"><div class="tier-bar t1" id="tier-bar-1" style="width:0%"></div></div>
+              <span class="tier-count" id="tier-count-1">—</span>
+            </div>
+            <div class="tier-row">
+              <span class="tier-badge t2">T2</span>
+              <div class="tier-bar-wrap"><div class="tier-bar t2" id="tier-bar-2" style="width:0%"></div></div>
+              <span class="tier-count" id="tier-count-2">—</span>
+            </div>
+            <div class="tier-row">
+              <span class="tier-badge t3">T3</span>
+              <div class="tier-bar-wrap"><div class="tier-bar t3" id="tier-bar-3" style="width:0%"></div></div>
+              <span class="tier-count" id="tier-count-3">—</span>
+            </div>
+            <div class="tier-row">
+              <span class="tier-badge t4">T4</span>
+              <div class="tier-bar-wrap"><div class="tier-bar t4" id="tier-bar-4" style="width:0%"></div></div>
+              <span class="tier-count" id="tier-count-4">—</span>
+            </div>
+          </div>
+        </div>
+ 
+      </div>
+ 
+      <!-- Model Status + Metrics -->
+      <div class="chart-grid-2">
+        <div class="card fade-in">
+          <div class="card-header"><span class="card-title">Model Status</span></div>
+          <div class="model-status-grid">
+            <div class="model-status-item">
+              <div class="model-dot" id="dot-if"></div>
+              <span class="model-label">Isolation Forest</span>
+            </div>
+            <div class="model-status-item">
+              <div class="model-dot" id="dot-svm"></div>
+              <span class="model-label">One-Class SVM</span>
+            </div>
+            <div class="model-status-item">
+              <div class="model-dot" id="dot-rf"></div>
+              <span class="model-label">Random Forest</span>
+            </div>
+            <div class="model-status-item">
+              <div class="model-dot" id="dot-xgb"></div>
+              <span class="model-label">XGBoost</span>
+            </div>
+          </div>
+        </div>
+        <div class="card fade-in">
+          <div class="card-header"><span class="card-title">Performance Metrics</span></div>
+          <div>
+            <div class="metric-row">
+              <span class="metric-name">Accuracy</span>
+              <span class="metric-value good" id="m-accuracy">—</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-name">Detection Rate (TPR)</span>
+              <span class="metric-value good" id="m-det-rate">—</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-name">False Positive Rate</span>
+              <span class="metric-value good" id="m-fpr">—</span>
+            </div>
+            <div class="metric-row">
+              <span class="metric-name">F1 Score</span>
+              <span class="metric-value good" id="m-f1">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+ 
+    </div><!-- /page-body -->
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+ 
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
+ 
