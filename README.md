@@ -10,22 +10,24 @@ Supervised by: Dr. Tehsin Kanwal
 - Muhammad Umar (CIIT/SP23-BCT-040/ISB) — Module 2, 3, 6
 
 ## Project Structure
+
+```text
 FYP/
-├── module2_detection/
-│ ├── data/ ← parquet files from Module 1 (not tracked)
-│ ├── models/ ← trained pkl files (not tracked)
-│ ├── webapp/
-│ │ ├── app.py
-│ │ ├── predictor.py
-│ │ ├── static/
-│ │ └── templates/
-│ ├── main.py
-│ ├── isolation_forest.py
-│ ├── one_class_svm.py
-│ ├── random_forest.py
-│ ├── xgboost_model.py
-│ ├── ensemble.py
-│ └── evaluator.py
+└── module2_detection/
+    ├── data/                    # Parquet files from Module 1 (not tracked)
+    ├── models/                  # Trained PKL files (not tracked)
+    ├── webapp/
+    │   ├── app.py
+    │   ├── predictor.py
+    │   ├── static/
+    │   └── templates/
+    ├── main.py
+    ├── isolation_forest.py
+    ├── one_class_svm.py
+    ├── random_forest.py
+    ├── xgboost_model.py
+    ├── ensemble.py
+    └── evaluator.py
 ## Setup Instructions
 
 ### 1. Clone the repository
