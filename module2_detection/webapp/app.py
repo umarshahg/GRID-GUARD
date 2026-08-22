@@ -15,6 +15,14 @@ from flask import (
 from functools import wraps
 from predictor import predictor
 
+# ── Module 3 integration ────────────────────────────────────────
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'module3_response_engine'))
+from module3_step4_database_logger import DatabaseLogger
+
+db_logger = DatabaseLogger()
+db_logger.connect()   # logs its own success/failure; app still runs if this fails
+# ─────────────────────────────────────────────────────────────
+
 # ── App Setup ──────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = 'gridguard-secret-key-2024'
@@ -110,6 +118,17 @@ def botnet():
         'botnet.html',
         user=session['user']
     )
+
+
+# ── NEW: Module 3 — IDS/IPS Responses page ──────────────────────
+@app.route('/ids-ips')
+@login_required
+def ids_ips():
+    return render_template(
+        'ids_ips.html',
+        user=session['user']
+    )
+# ─────────────────────────────────────────────────────────────
 
 
 # ══════════════════════════════════════════════════════════════
@@ -251,6 +270,51 @@ def api_user():
 
 
 # ══════════════════════════════════════════════════════════════
+#  NEW: MODULE 3 API ROUTES — IDS/IPS Responses
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/response-log')
+@login_required
+def api_response_log():
+    """
+    Returns recent Module 3 actions for the IDS/IPS Responses table.
+    Query param: limit (default 50, max 500)
+    """
+    if not db_logger.connected:
+        return jsonify({"error": "Database not connected", "actions": [], "count": 0}), 503
+
+    limit = min(int(request.args.get('limit', 50)), 500)
+    actions = db_logger.get_recent_actions(limit=limit)
+
+    # Normalize field names / add tier number for the frontend badge coloring
+    TIER_BY_ACTION = {"LOG": 1, "ALERT": 2, "RATE_LIMIT": 3, "FULL_ISOLATION": 4}
+    for a in actions:
+        a["tier"] = TIER_BY_ACTION.get(a.get("action_type"), None)
+        a["risk_score"] = None
+        a["description"] = ""
+        try:
+            import ast
+            payload = ast.literal_eval(a.get("payload", "{}")) if a.get("payload") else {}
+            a["risk_score"] = payload.get("risk_score")
+            a["description"] = payload.get("description", "")
+        except Exception:
+            pass
+
+    return jsonify({"actions": actions, "count": len(actions)})
+
+
+@app.route('/api/response-counts')
+@login_required
+def api_response_counts():
+    """Returns count of actions per tier, for the summary cards."""
+    if not db_logger.connected:
+        return jsonify({"error": "Database not connected", "counts": {}}), 503
+
+    counts = db_logger.get_action_counts()
+    return jsonify({"counts": counts, "total": sum(counts.values())})
+
+
+# ══════════════════════════════════════════════════════════════
 #  RUN
 # ══════════════════════════════════════════════════════════════
 
@@ -260,6 +324,7 @@ if __name__ == '__main__':
     print("="*55)
     print(f"  Models loaded : {predictor.loaded}")
     print(f"  Test rows     : {len(predictor.X_test) if predictor.X_test is not None else 0:,}")
+    print(f"  DB connected  : {db_logger.connected}")
     print()
     print("  Open in browser: http://127.0.0.1:5000")
     print("="*55)

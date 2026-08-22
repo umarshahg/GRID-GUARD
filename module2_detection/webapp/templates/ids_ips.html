@@ -1,0 +1,124 @@
+<!-- webapp/templates/ids_ips.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRID GUARD — IDS/IPS Responses</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ── Sidebar ── -->
+  {% include '_sidebar.html' ignore missing %}
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <a href="/dashboard" class="sidebar-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"/></svg>
+        </div>
+        <div class="brand-text">
+          <h2>GRID GUARD</h2>
+          <span>Defense System</span>
+        </div>
+      </a>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Monitoring</div>
+        <a href="/dashboard" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        <a href="/traffic" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Traffic Monitor
+        </a>
+        <a href="/botnet" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Botnet Detection
+        </a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">System</div>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Sandbox Env
+        </a>
+        <a href="/ids-ips" class="nav-item active">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          IDS/IPS Responses
+        </a>
+        <a href="#" class="nav-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+          Settings
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Main content ── -->
+  <div class="main-content">
+    <div class="page-header">
+      <h1>IDS/IPS Responses</h1>
+      <p class="page-subtitle">Automated tiered response to detected threats — logging, alerts, rate limiting, and isolation actions taken in real time.</p>
+    </div>
+
+    <!-- Summary cards: one per tier -->
+    <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-bottom:24px;">
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title" style="color:var(--status-normal);">Tier 1 — LOG</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="count-tier-1">—</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title" style="color:var(--status-alert);">Tier 2 — ALERT</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="count-tier-2">—</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title" style="color:var(--status-ratelimit);">Tier 3 — RATE_LIMIT</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="count-tier-3">—</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title" style="color:var(--accent-red);">Tier 4 — FULL_ISOLATION</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="count-tier-4">—</div>
+      </div>
+    </div>
+
+    <!-- Live action log -->
+    <div class="card fade-in">
+      <div class="card-header">
+        <span class="card-title">Recent Responses</span>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <select id="log-count-select" style="background:var(--bg-input); border:1px solid var(--border); color:var(--text-secondary); border-radius:6px; padding:4px 8px; font-size:0.75rem; font-family:'Source Code Pro',monospace; outline:none;">
+            <option value="25">25 actions</option>
+            <option value="50" selected>50 actions</option>
+            <option value="100">100 actions</option>
+          </select>
+          <button class="btn btn-outline" style="padding:4px 10px; font-size:0.7rem;" id="refresh-log-btn">Refresh</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Meter ID</th>
+              <th>Risk Score</th>
+              <th>Tier</th>
+              <th>Action</th>
+              <th>Description</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="ids-ips-table-body">
+            <tr><td colspan="6"><div class="loading"><div class="spinner"></div><span>Loading response log...</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/ids_ips.js') }}"></script>
+</body>
+</html>

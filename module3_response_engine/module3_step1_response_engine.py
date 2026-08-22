@@ -31,7 +31,6 @@ class ResponseAction(Enum):
     RATE_LIMIT = "RATE_LIMIT"
     FULL_ISOLATION = "FULL_ISOLATION"
 
-
 @dataclass
 class ResponseDecision:
     meter_id: str
@@ -40,8 +39,17 @@ class ResponseDecision:
     action: ResponseAction
     description: str
     timestamp: str
-
-
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for logging"""
+        return {
+            'meter_id': self.meter_id,
+            'risk_score': self.risk_score,
+            'tier': self.tier.name,
+            'action': self.action.value,
+            'description': self.description,
+            'timestamp': self.timestamp
+        }
 class GraduatedResponseEngine:
     """
     Maps a calibrated ensemble risk score (0-100, from Module 2)

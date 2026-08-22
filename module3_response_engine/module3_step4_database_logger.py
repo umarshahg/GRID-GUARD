@@ -272,6 +272,36 @@ class DatabaseLogger:
             print(f"[DatabaseLogger] ❌ Query error: {e}")
             return {}
 
+
+    def insert_alert(self, decision, behavior_type: str = "UNKNOWN") -> bool:
+        """
+        Inserts into the dedicated `alerts` table for Tier 2+ decisions.
+        Tier 1 (LOG) deliberately gets no alert row.
+        """
+        if not self.connected:
+            return False
+        if decision.tier.value < 2:
+            return True  # Tier 1 is log-only, not an error
+
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO alerts (meter_id, risk_score, response_tier, behavior_type)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING alert_id
+                    """,
+                    (decision.meter_id, decision.risk_score, decision.tier.value, behavior_type),
+                )
+                alert_id = cur.fetchone()[0]
+            self.conn.commit()
+            print(f"[DatabaseLogger] ✅ Alert {alert_id} created for {decision.meter_id} (tier {decision.tier.value})")
+            return True
+        except psycopg2.Error as e:
+            print(f"[DatabaseLogger] ❌ Alert insert error: {e}")
+            self.conn.rollback()
+            return False
+
     def close(self):
         """Close database connection"""
         if self.conn:
