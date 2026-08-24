@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>GRID GUARD — IDS/IPS Responses</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -85,6 +86,33 @@
       </div>
     </div>
 
+
+    <!-- System Metrics (FE-5: Redis state + Prometheus) -->
+    <div class="card fade-in" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">System Metrics</span>
+        <span style="font-size:0.7rem; color:var(--text-muted);">Live from Redis state cache</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; padding:8px 16px 16px;">
+        <div>
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Total Meters Tracked</div>
+          <div style="font-size:1.6rem; font-weight:700;" id="sys-total-meters">—</div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Average Risk Score</div>
+          <div style="font-size:1.6rem; font-weight:700;" id="sys-avg-risk">—</div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Critical Meters</div>
+          <div style="font-size:1.6rem; font-weight:700; color:var(--accent-red);" id="sys-critical-count">—</div>
+        </div>
+        <div>
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Currently Isolated</div>
+          <div style="font-size:1.6rem; font-weight:700; color:var(--accent-red);" id="sys-isolated-count">—</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Live action log -->
     <div class="card fade-in">
       <div class="card-header">
@@ -112,6 +140,56 @@
           </thead>
           <tbody id="ids-ips-table-body">
             <tr><td colspan="6"><div class="loading"><div class="spinner"></div><span>Loading response log...</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- Notification Delivery Log -->
+    <div class="card fade-in" style="margin-top:24px;">
+      <div class="card-header">
+        <span class="card-title">Notification Delivery Log</span>
+        <span style="font-size:0.7rem; color:var(--text-muted);">Email &amp; webhook attempts for Tier 2 alerts</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Meter ID</th>
+              <th>Risk Score</th>
+              <th>Email</th>
+              <th>Webhook</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="delivery-log-table-body">
+            <tr><td colspan="5"><div class="loading"><div class="spinner"></div><span>Loading delivery log...</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <!-- Active Rate Limits (FE-3: real iptables enforcement) -->
+    <div class="card fade-in" style="margin-top:24px;">
+      <div class="card-header">
+        <span class="card-title">Active Rate Limits</span>
+        <span style="font-size:0.7rem; color:var(--text-muted);">Real iptables rules applied to Tier 3 meters</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Meter ID</th>
+              <th>Risk Score</th>
+              <th>Assigned IP</th>
+              <th>Firewall Status</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="rate-limit-table-body">
+            <tr><td colspan="5"><div class="loading"><div class="spinner"></div><span>Loading rate limits...</span></div></td></tr>
           </tbody>
         </table>
       </div>

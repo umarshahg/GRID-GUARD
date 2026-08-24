@@ -291,3 +291,66 @@ if __name__ == '__main__':
     # Start Flask app
     print("🚀 Starting Flask API on http://0.0.0.0:5002")
     app.run(host='0.0.0.0', port=5002, debug=False)
+
+# ═════════════════════════════════════════════════════════════════════════
+# FE-5: STATE MANAGEMENT ENDPOINTS
+# ═════════════════════════════════════════════════════════════════════════
+
+from redis_state_manager import RedisStateManager
+from prometheus_client import Counter, Gauge, generate_latest, REGISTRY
+
+state_manager = RedisStateManager()
+
+# Prometheus Metrics
+alerts_by_tier = Counter('gridguard_alerts_generated_total', 'Total alerts', ['tier'])
+isolated_gauge = Gauge('gridguard_isolated_meters_current', 'Currently isolated')
+avg_risk_gauge = Gauge('gridguard_average_risk_score', 'Average risk')
+critical_gauge = Gauge('gridguard_critical_meters', 'Critical meters')
+
+@app.route('/api/module3/meter-state/<meter_id>', methods=['GET'])
+def get_meter_state(meter_id):
+    """Get current state of a specific meter"""
+    try:
+        state = state_manager.get_meter_state(meter_id)
+        if state:
+            return jsonify({'status': 'success', 'meter_id': meter_id, 'state': state})
+        return jsonify({'status': 'not_found', 'message': f'No state for {meter_id}'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/module3/all-meter-states', methods=['GET'])
+def get_all_meter_states():
+    """Get all meters' current states"""
+    try:
+        states = state_manager.get_all_meter_states()
+        return jsonify({'status': 'success', 'total': len(states), 'states': states})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/module3/system-metrics', methods=['GET'])
+def get_system_metrics():
+    """Get system-wide metrics"""
+    try:
+        metrics = state_manager.get_system_metrics()
+        return jsonify({'status': 'success', 'metrics': metrics})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/api/module3/isolated-meters', methods=['GET'])
+def get_isolated_meters():
+    """Get currently isolated meters"""
+    try:
+        isolated = state_manager.get_isolated_meters()
+        states = {mid: state_manager.get_meter_state(mid) for mid in isolated}
+        return jsonify({'status': 'success', 'count': len(isolated), 'isolated_meters': states})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/metrics', methods=['GET'])
+def prometheus_metrics():
+    """Prometheus metrics endpoint"""
+    metrics = state_manager.get_system_metrics()
+    isolated_gauge.set(metrics.get('isolation_count', 0))
+    avg_risk_gauge.set(metrics.get('average_risk_score', 0))
+    critical_gauge.set(metrics.get('critical_count', 0))
+    return generate_latest(REGISTRY), 200, {'Content-Type': 'text/plain'}

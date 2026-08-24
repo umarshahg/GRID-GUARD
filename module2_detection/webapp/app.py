@@ -21,11 +21,46 @@ from module3_step4_database_logger import DatabaseLogger
 
 db_logger = DatabaseLogger()
 db_logger.connect()   # logs its own success/failure; app still runs if this fails
+
+from redis_state_manager import RedisStateManager
+from prometheus_client import Counter, Gauge, generate_latest, REGISTRY
+
+state_manager = RedisStateManager()
+
+isolated_gauge = Gauge('gridguard_isolated_meters_current', 'Currently isolated meters')
+avg_risk_gauge = Gauge('gridguard_average_risk_score', 'Average risk score across meters')
+critical_gauge = Gauge('gridguard_critical_meters', 'Meters above critical risk threshold')
+
+import threading
+import json as json_module
+import redis
+from flask_socketio import SocketIO, emit
+
+DASHBOARD_CHANNEL = "channel:alerts"
+
+
+def background_redis_listener(socketio_instance):
+    """Relays Module 3's pipeline notifications to connected browsers."""
+    r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+    pubsub = r.pubsub()
+    pubsub.subscribe(DASHBOARD_CHANNEL)
+    print(f"[WebSocket] Listening for dashboard notifications on '{DASHBOARD_CHANNEL}'...")
+    for message in pubsub.listen():
+        if message["type"] != "message":
+            continue
+        try:
+            data = json_module.loads(message["data"])
+            socketio_instance.emit("new_response", data)
+            print(f"[WebSocket] Pushed to dashboard: {data}")
+        except Exception as e:
+            print(f"[WebSocket] Error relaying message: {e}")
 # ─────────────────────────────────────────────────────────────
 
 # ── App Setup ──────────────────────────────────────────────────
 app = Flask(__name__)
 app.secret_key = 'gridguard-secret-key-2024'
+
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 # ── Hardcoded credentials (no DB needed for FYP demo) ─────────
 USERS = {
@@ -120,7 +155,7 @@ def botnet():
     )
 
 
-# ── NEW: Module 3 — IDS/IPS Responses page ──────────────────────
+# ── Module 3 — IDS/IPS Responses page ──────────────────────
 @app.route('/ids-ips')
 @login_required
 def ids_ips():
@@ -138,10 +173,6 @@ def ids_ips():
 @app.route('/api/status')
 @login_required
 def api_status():
-    """
-    Returns system status — are models loaded and ready?
-    Called by dashboard on page load.
-    """
     return jsonify({
         "status":        "online" if predictor.loaded else "offline",
         "models_loaded": predictor.loaded,
@@ -153,12 +184,6 @@ def api_status():
 @app.route('/api/summary')
 @login_required
 def api_summary():
-    """
-    Returns full evaluation metrics from test set.
-    Used by Dashboard and Botnet Detection pages.
-    Accuracy, Detection Rate, FPR, F1, AUC, confusion matrix,
-    tier distribution, feature importance, risk histogram.
-    """
     try:
         data = predictor.get_summary()
         return jsonify(data)
@@ -169,11 +194,6 @@ def api_summary():
 @app.route('/api/traffic')
 @login_required
 def api_traffic():
-    """
-    Returns traffic monitoring statistics.
-    Used by Traffic Monitor page.
-    Protocol distribution, flow counts, risk means.
-    """
     try:
         data = predictor.get_traffic_stats()
         return jsonify(data)
@@ -184,11 +204,6 @@ def api_traffic():
 @app.route('/api/flows')
 @login_required
 def api_flows():
-    """
-    Returns scored sample of test flows for table display.
-    Query param: n = number of flows (default 50, max 200)
-    Used by Botnet Detection page live flow table.
-    """
     try:
         n    = min(int(request.args.get('n', 50)), 200)
         data = predictor.predict_sample(n=n)
@@ -200,12 +215,6 @@ def api_flows():
 @app.route('/api/scan', methods=['POST'])
 @login_required
 def api_scan():
-    """
-    Simulates scanning a single smart meter.
-    POST body: { "meter_id": "SM-1234" } (optional)
-    Returns risk score, tier, action for that meter.
-    Used by Dashboard scan button.
-    """
     try:
         body     = request.get_json(silent=True) or {}
         meter_id = body.get('meter_id', None)
@@ -218,10 +227,6 @@ def api_scan():
 @app.route('/api/timeline')
 @login_required
 def api_timeline():
-    """
-    Returns anomaly score timeline for chart rendering.
-    Used by Botnet Detection anomaly chart.
-    """
     try:
         summary  = predictor.get_summary()
         return jsonify({
@@ -235,10 +240,6 @@ def api_timeline():
 @app.route('/api/features')
 @login_required
 def api_features():
-    """
-    Returns feature importance ranking from Random Forest.
-    Used by Botnet Detection top features bar chart.
-    """
     try:
         summary = predictor.get_summary()
         return jsonify(summary.get("feature_importance", {}))
@@ -249,10 +250,6 @@ def api_features():
 @app.route('/api/histogram')
 @login_required
 def api_histogram():
-    """
-    Returns risk score distribution histogram data.
-    Used by Dashboard risk distribution chart.
-    """
     try:
         summary = predictor.get_summary()
         return jsonify(summary.get("histogram", {}))
@@ -263,30 +260,22 @@ def api_histogram():
 @app.route('/api/user')
 @login_required
 def api_user():
-    """
-    Returns current logged in user info.
-    """
     return jsonify(session.get('user', {}))
 
 
 # ══════════════════════════════════════════════════════════════
-#  NEW: MODULE 3 API ROUTES — IDS/IPS Responses
+#  MODULE 3 API ROUTES — IDS/IPS Responses
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/response-log')
 @login_required
 def api_response_log():
-    """
-    Returns recent Module 3 actions for the IDS/IPS Responses table.
-    Query param: limit (default 50, max 500)
-    """
     if not db_logger.connected:
         return jsonify({"error": "Database not connected", "actions": [], "count": 0}), 503
 
     limit = min(int(request.args.get('limit', 50)), 500)
     actions = db_logger.get_recent_actions(limit=limit)
 
-    # Normalize field names / add tier number for the frontend badge coloring
     TIER_BY_ACTION = {"LOG": 1, "ALERT": 2, "RATE_LIMIT": 3, "FULL_ISOLATION": 4}
     for a in actions:
         a["tier"] = TIER_BY_ACTION.get(a.get("action_type"), None)
@@ -315,6 +304,63 @@ def api_response_counts():
 
 
 # ══════════════════════════════════════════════════════════════
+#  MODULE 3 — FE-5: STATE MANAGEMENT ENDPOINTS
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/api/module3/meter-state/<meter_id>', methods=['GET'])
+@login_required
+def get_meter_state(meter_id):
+    try:
+        state = state_manager.get_meter_state(meter_id)
+        if state:
+            return jsonify({'status': 'success', 'meter_id': meter_id, 'state': state})
+        return jsonify({'status': 'not_found', 'message': f'No state for {meter_id}'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/module3/all-meter-states', methods=['GET'])
+@login_required
+def get_all_meter_states():
+    try:
+        states = state_manager.get_all_meter_states()
+        return jsonify({'status': 'success', 'total': len(states), 'states': states})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/module3/system-metrics', methods=['GET'])
+@login_required
+def get_system_metrics():
+    try:
+        metrics = state_manager.get_system_metrics()
+        return jsonify({'status': 'success', 'metrics': metrics})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/module3/isolated-meters', methods=['GET'])
+@login_required
+def get_isolated_meters():
+    try:
+        isolated = state_manager.get_isolated_meters()
+        states = {mid: state_manager.get_meter_state(mid) for mid in isolated}
+        return jsonify({'status': 'success', 'count': len(isolated), 'isolated_meters': states})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/metrics', methods=['GET'])
+def prometheus_metrics():
+    """Prometheus scrapes this. No @login_required -- Prometheus can't log in."""
+    metrics = state_manager.get_system_metrics()
+    isolated_gauge.set(metrics.get('isolation_count', 0))
+    avg_risk_gauge.set(metrics.get('average_risk_score', 0))
+    critical_gauge.set(metrics.get('critical_count', 0))
+    return generate_latest(REGISTRY), 200, {'Content-Type': 'text/plain'}
+
+
+# ══════════════════════════════════════════════════════════════
 #  RUN
 # ══════════════════════════════════════════════════════════════
 
@@ -334,4 +380,8 @@ if __name__ == '__main__':
     print("  operator@gridguard.com / operator123")
     print("  analyst@gridguard.com  / analyst123")
     print("="*55)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+    listener_thread = threading.Thread(target=background_redis_listener, args=(socketio,), daemon=True)
+    listener_thread.start()
+
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
