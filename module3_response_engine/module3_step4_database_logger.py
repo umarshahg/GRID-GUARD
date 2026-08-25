@@ -244,6 +244,39 @@ class DatabaseLogger:
             self.conn.rollback()
             return False
 
+    def set_meter_state(self, meter_id: str, state: str, ip_address: str = None) -> bool:
+        """
+        Updates the meters table's state column. This is what Module 4's
+        dashboard actually reads to find quarantined meters.
+
+        Uses an UPSERT (INSERT ... ON CONFLICT DO UPDATE) rather than a
+        plain UPDATE, because not every tier registers the meter first
+        (only Tier 3's rate limiter does, via meter_ip_registry.py). A
+        plain UPDATE against a meter_id that doesn't exist yet silently
+        affects 0 rows without erroring -- this ensures the row exists
+        either way.
+        """
+        if not self.connected:
+            return False
+        try:
+            with self.conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO meters (meter_id, ip_address, state, last_updated)
+                    VALUES (%s, %s, %s, NOW())
+                    ON CONFLICT (meter_id) DO UPDATE
+                    SET state = EXCLUDED.state, last_updated = NOW()
+                    """,
+                    (meter_id, ip_address, state),
+                )
+            self.conn.commit()
+            print(f"[DatabaseLogger] ✅ Set {meter_id} state to {state}")
+            return True
+        except psycopg2.Error as e:
+            print(f"[DatabaseLogger] ❌ set_meter_state error: {e}")
+            self.conn.rollback()
+            return False
+
     def close(self):
         if self.conn:
             self.conn.close()

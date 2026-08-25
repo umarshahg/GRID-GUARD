@@ -363,14 +363,20 @@ def prometheus_metrics():
 # ══════════════════════════════════════════════════════════════
 #  RUN
 # ══════════════════════════════════════════════════════════════
-@app.route("/sandbox")
+
+
+# ══════════════════════════════════════════════════════════════
+# MODULE 4: SANDBOXING & ISOLATION
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/sandbox')
 @login_required
 def sandbox():
-    return render_template("module4_sandbox.html", user=session["user"])
+    return render_template('module4_sandbox.html', user=session['user'])
 
-@app.route("/api/module4/quarantined-meters", methods=["GET"])
+@app.route('/api/module4/quarantined-meters', methods=['GET'])
 @login_required
-def get_quarantined_meters_m4():
+def get_quarantined_meters():
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Database not connected"}), 503
@@ -384,18 +390,18 @@ def get_quarantined_meters_m4():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/module4/release/<meter_id>", methods=["POST"])
+@app.route('/api/module4/release/<meter_id>', methods=['POST'])
 @login_required
-def release_meter_m4(meter_id):
+def release_meter_api(meter_id):
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Database not connected"}), 503
     try:
         data = request.get_json()
-        analyst_notes = data.get("notes", "") if data else ""
+        analyst_notes = data.get('notes', '') if data else ''
         cursor = conn.cursor()
-        cursor.execute("UPDATE meters SET state = %s, last_updated = %s WHERE meter_id = %s", ("NORMAL", datetime.now(), meter_id))
-        cursor.execute("INSERT INTO audit_log (actor, action_type, target_entity, payload, created_at) VALUES (%s, %s, %s, %s, %s)", (session["user"]["email"], "RELEASE", meter_id, json.dumps({"action": "RELEASE", "notes": analyst_notes}), datetime.now()))
+        cursor.execute("UPDATE meters SET state = %s, last_updated = %s WHERE meter_id = %s", ('NORMAL', datetime.now(), meter_id))
+        cursor.execute("INSERT INTO audit_log (actor, action_type, target_entity, payload, created_at) VALUES (%s, %s, %s, %s, %s)", (session['user']['email'], 'RELEASE', meter_id, json_module.dumps({'action': 'RELEASE', 'notes': analyst_notes}), datetime.now()))
         conn.commit()
         cursor.close()
         conn.close()
@@ -403,25 +409,23 @@ def release_meter_m4(meter_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/module4/stats", methods=["GET"])
+@app.route('/api/module4/stats', methods=['GET'])
 @login_required
-def get_module4_stats_m4():
+def get_module4_stats():
     conn = get_db_connection()
     if not conn:
         return jsonify({"error": "Database not connected"}), 503
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) as count FROM meters WHERE state = 'QUARANTINE'")
-        isolation_count = cursor.fetchone()["count"]
+        isolation_count = cursor.fetchone()['count']
         cursor.execute("SELECT COUNT(*) as count FROM audit_log WHERE action_type = 'RELEASE' AND DATE(created_at) = CURRENT_DATE")
-        released_count = cursor.fetchone()["count"]
+        released_count = cursor.fetchone()['count']
         cursor.close()
         conn.close()
         return jsonify({"isolation_count": isolation_count, "dnat_count": isolation_count, "pcap_count": isolation_count, "released_count": released_count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-
 
 if __name__ == '__main__':
     print("="*55)
@@ -439,13 +443,6 @@ if __name__ == '__main__':
     print("  operator@gridguard.com / operator123")
     print("  analyst@gridguard.com  / analyst123")
     print("="*55)
-
     listener_thread = threading.Thread(target=background_redis_listener, args=(socketio,), daemon=True)
     listener_thread.start()
-
     socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
-# ══════════════════════════════════════════════════════════════
-# MODULE 4: SANDBOXING & ISOLATION
-# ══════════════════════════════════════════════════════════════
-

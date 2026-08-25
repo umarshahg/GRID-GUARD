@@ -1,0 +1,108 @@
+<!-- Module 4: Sandboxing & Isolation -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GRID GUARD — Sandbox Environment</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+<div class="app-layout">
+  {% include '_sidebar.html' ignore missing %}
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <a href="/dashboard" class="sidebar-brand">
+        <div class="brand-icon"><svg viewBox="0 0 24 24"><path d="M12 2L3 6v6c0 5.25 3.75 10.15 9 11.25C17.25 22.15 21 17.25 21 12V6L12 2z"/></svg></div>
+        <div class="brand-text"><h2>GRID GUARD</h2><span>Defense System</span></div>
+      </a>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-label">Monitoring</div>
+        <a href="/dashboard" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
+        <a href="/traffic" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Traffic Monitor</a>
+        <a href="/botnet" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Botnet Detection</a>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">System</div>
+        <a href="/sandbox" class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>Sandbox Env</a>
+        <a href="/ids-ips" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>IDS/IPS Responses</a>
+        <a href="#" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Settings</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main-content">
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>Sandbox Environment</h1>
+        <p>Isolation, forensic capture, and controlled release of compromised meters</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <div class="status-dot" id="sandbox-dot"></div>
+          <span id="sandbox-status-text">0 Active Isolations</span>
+        </div>
+        <button class="btn btn-primary" id="refresh-sandbox-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Quarantined Meters -->
+    <div class="card fade-in" style="margin-bottom:24px;">
+      <div class="card-header">
+        <span class="card-title">Quarantined Meters</span>
+        <span style="font-size:0.7rem; color:var(--text-muted);">FE-1 to FE-4: Isolation Pipeline</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Meter ID</th><th>IP Address</th><th>State</th><th>DNAT Rule</th><th>Forensics</th><th>Action</th></tr>
+          </thead>
+          <tbody id="quarantine-table-body">
+            <tr><td colspan="6"><div class="loading"><div class="spinner"></div><span>Loading meters...</span></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Release Meter Modal -->
+    <div id="release-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+      <div class="card" style="width:400px; padding:20px;">
+        <h3 id="release-modal-title">Release Meter</h3>
+        <p id="release-modal-meter"></p>
+        <textarea id="release-notes" placeholder="Analyst notes..." style="width:100%; height:80px; padding:8px; border:1px solid var(--border); border-radius:4px; font-family:monospace; margin-bottom:16px;"></textarea>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary" onclick="confirmRelease()">Confirm Release</button>
+          <button class="btn btn-outline" onclick="closeReleaseModal()">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Isolation Stats -->
+    <div class="stats-grid" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px; margin-top:24px;">
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title">Active Isolations</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="stat-isolation-count">0</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title">DNAT Rules</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="stat-dnat-count">0</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title">Forensic Captures</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="stat-pcap-count">0</div>
+      </div>
+      <div class="card fade-in">
+        <div class="card-header"><span class="card-title">Released Today</span></div>
+        <div style="font-size:1.8rem; font-weight:700; padding:8px 16px;" id="stat-released-count">0</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/module4_sandbox.js') }}"></script>
+</body>
+</html>

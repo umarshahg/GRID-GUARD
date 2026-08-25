@@ -101,6 +101,7 @@ class ResponsePipeline:
 
         if decision.action.value == "FULL_ISOLATION":
             self.state_manager.mark_meter_isolated(meter_id)
+            self.logger.set_meter_state(meter_id, "SANDBOXED")
             print(f"[Pipeline] Marked {meter_id} as isolated")
 
 

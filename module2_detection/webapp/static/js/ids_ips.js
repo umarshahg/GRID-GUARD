@@ -13,7 +13,7 @@ function statusBadge(sent) {
 
 async function loadDeliveryLog() {
     try {
-        const res = await fetch('/api/response-log?limit=100');
+        const res = await fetch('/api/actions/parsed?limit=100');
         const data = await res.json();
         const tbody = document.getElementById('delivery-log-table-body');
 
@@ -121,7 +121,7 @@ function firewallStatusBadge(applied) {
 
 async function loadRateLimits() {
     try {
-        const res = await fetch('/api/response-log?limit=100');
+        const res = await fetch('/api/actions/parsed?limit=100');
         const data = await res.json();
         const tbody = document.getElementById('rate-limit-table-body');
 
