@@ -39,6 +39,24 @@ from flask_socketio import SocketIO, emit
 DASHBOARD_CHANNEL = "channel:alerts"
 
 
+
+def get_db_connection():
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        conn = psycopg2.connect(
+            host="localhost",
+            database="gridguard",
+            user="gridguard",
+            password=os.getenv("DB_PASSWORD", "gridguard"),
+            port=5432,
+            cursor_factory=RealDictCursor
+        )
+        return conn
+    except Exception as e:
+        print(f"DB connection error: {e}")
+        return None
+
 def background_redis_listener(socketio_instance):
     """Relays Module 3's pipeline notifications to connected browsers."""
     r = redis.Redis(host="localhost", port=6379, decode_responses=True)
@@ -129,7 +147,6 @@ def logout():
 
 
 @app.route('/dashboard')
-@login_required
 def dashboard():
     return render_template(
         'dashboard.html',
@@ -138,7 +155,6 @@ def dashboard():
 
 
 @app.route('/traffic')
-@login_required
 def traffic():
     return render_template(
         'traffic.html',
@@ -147,7 +163,6 @@ def traffic():
 
 
 @app.route('/botnet')
-@login_required
 def botnet():
     return render_template(
         'botnet.html',
@@ -157,7 +172,6 @@ def botnet():
 
 # ── Module 3 — IDS/IPS Responses page ──────────────────────
 @app.route('/ids-ips')
-@login_required
 def ids_ips():
     return render_template(
         'ids_ips.html',
@@ -171,7 +185,6 @@ def ids_ips():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/status')
-@login_required
 def api_status():
     return jsonify({
         "status":        "online" if predictor.loaded else "offline",
@@ -182,7 +195,6 @@ def api_status():
 
 
 @app.route('/api/summary')
-@login_required
 def api_summary():
     try:
         data = predictor.get_summary()
@@ -192,7 +204,6 @@ def api_summary():
 
 
 @app.route('/api/traffic')
-@login_required
 def api_traffic():
     try:
         data = predictor.get_traffic_stats()
@@ -202,7 +213,6 @@ def api_traffic():
 
 
 @app.route('/api/flows')
-@login_required
 def api_flows():
     try:
         n    = min(int(request.args.get('n', 50)), 200)
@@ -213,7 +223,6 @@ def api_flows():
 
 
 @app.route('/api/scan', methods=['POST'])
-@login_required
 def api_scan():
     try:
         body     = request.get_json(silent=True) or {}
@@ -225,7 +234,6 @@ def api_scan():
 
 
 @app.route('/api/timeline')
-@login_required
 def api_timeline():
     try:
         summary  = predictor.get_summary()
@@ -238,7 +246,6 @@ def api_timeline():
 
 
 @app.route('/api/features')
-@login_required
 def api_features():
     try:
         summary = predictor.get_summary()
@@ -248,7 +255,6 @@ def api_features():
 
 
 @app.route('/api/histogram')
-@login_required
 def api_histogram():
     try:
         summary = predictor.get_summary()
@@ -258,7 +264,6 @@ def api_histogram():
 
 
 @app.route('/api/user')
-@login_required
 def api_user():
     return jsonify(session.get('user', {}))
 
@@ -268,7 +273,6 @@ def api_user():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/response-log')
-@login_required
 def api_response_log():
     if not db_logger.connected:
         return jsonify({"error": "Database not connected", "actions": [], "count": 0}), 503
@@ -293,7 +297,6 @@ def api_response_log():
 
 
 @app.route('/api/response-counts')
-@login_required
 def api_response_counts():
     """Returns count of actions per tier, for the summary cards."""
     if not db_logger.connected:
@@ -308,7 +311,6 @@ def api_response_counts():
 # ══════════════════════════════════════════════════════════════
 
 @app.route('/api/module3/meter-state/<meter_id>', methods=['GET'])
-@login_required
 def get_meter_state(meter_id):
     try:
         state = state_manager.get_meter_state(meter_id)
@@ -320,7 +322,6 @@ def get_meter_state(meter_id):
 
 
 @app.route('/api/module3/all-meter-states', methods=['GET'])
-@login_required
 def get_all_meter_states():
     try:
         states = state_manager.get_all_meter_states()
@@ -330,7 +331,6 @@ def get_all_meter_states():
 
 
 @app.route('/api/module3/system-metrics', methods=['GET'])
-@login_required
 def get_system_metrics():
     try:
         metrics = state_manager.get_system_metrics()
@@ -340,7 +340,6 @@ def get_system_metrics():
 
 
 @app.route('/api/module3/isolated-meters', methods=['GET'])
-@login_required
 def get_isolated_meters():
     try:
         isolated = state_manager.get_isolated_meters()
@@ -352,7 +351,6 @@ def get_isolated_meters():
 
 @app.route('/metrics', methods=['GET'])
 def prometheus_metrics():
-    """Prometheus scrapes this. No @login_required -- Prometheus can't log in."""
     metrics = state_manager.get_system_metrics()
     isolated_gauge.set(metrics.get('isolation_count', 0))
     avg_risk_gauge.set(metrics.get('average_risk_score', 0))
@@ -364,12 +362,10 @@ def prometheus_metrics():
 #  RUN
 # ══════════════════════════════════════════════════════════════
 @app.route("/sandbox")
-@login_required
 def sandbox():
     return render_template("module4_sandbox.html", user=session["user"])
 
 @app.route("/api/module4/quarantined-meters", methods=["GET"])
-@login_required
 def get_quarantined_meters_m4():
     conn = get_db_connection()
     if not conn:
@@ -385,7 +381,6 @@ def get_quarantined_meters_m4():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/module4/release/<meter_id>", methods=["POST"])
-@login_required
 def release_meter_m4(meter_id):
     conn = get_db_connection()
     if not conn:
@@ -404,7 +399,6 @@ def release_meter_m4(meter_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/module4/stats", methods=["GET"])
-@login_required
 def get_module4_stats_m4():
     conn = get_db_connection()
     if not conn:
