@@ -22,7 +22,7 @@ REDIS_HOST = os.getenv("GRIDGUARD_REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("GRIDGUARD_REDIS_PORT", "6379"))
 RISK_CHANNEL = "channel:risk_updates"
 DASHBOARD_CHANNEL = "channel:alerts"
-TIER_TO_STATE = {1: "NORMAL", 2: "ALERT", 3: "RATE_LIMITED", 4: "SANDBOXED"}
+TIER_TO_STATE = {1: "NORMAL", 2: "ALERT", 3: "RATE_LIMITED", 4: "QUARANTINE"}
 
 
 class ResponsePipeline:
@@ -101,7 +101,7 @@ class ResponsePipeline:
 
         if decision.action.value == "FULL_ISOLATION":
             self.state_manager.mark_meter_isolated(meter_id)
-            self.logger.set_meter_state(meter_id, "SANDBOXED")
+            self.logger.set_meter_state(meter_id, "QUARANTINE")
             print(f"[Pipeline] Marked {meter_id} as isolated")
 
 
