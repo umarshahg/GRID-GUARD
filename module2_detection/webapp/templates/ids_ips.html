@@ -61,9 +61,21 @@
 
   <!-- ── Main content ── -->
   <div class="main-content">
-    <div class="page-header">
-      <h1>IDS/IPS Responses</h1>
-      <p class="page-subtitle">Automated tiered response to detected threats — logging, alerts, rate limiting, and isolation actions taken in real time.</p>
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>IDS/IPS Responses</h1>
+        <p>Automated tiered response to detected threats — logging, alerts, rate limiting, and isolation actions taken in real time.</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <div class="status-dot"></div>
+          <span>System Online</span>
+        </div>
+        <button class="btn btn-primary" onclick="location.reload()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+      </div>
     </div>
 
     <!-- Summary cards: one per tier -->
