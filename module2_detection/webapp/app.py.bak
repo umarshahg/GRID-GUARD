@@ -417,43 +417,6 @@ def get_module4_stats_m4():
 
 
 
-@app.route('/api/actions/parsed', methods=['GET'])
-def api_actions_parsed():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT log_id, actor, action_type, target_entity, payload, rate_limit_ip, rate_limit_applied, email_sent, webhook_sent, created_at FROM audit_log WHERE action_type = 'RATE_LIMIT' ORDER BY created_at DESC LIMIT 100")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        actions = []
-        for r in rows:
-            payload = r['payload']
-            risk_score = None
-            if payload:
-                try:
-                    import json
-                    p = json.loads(payload) if isinstance(payload, str) else payload
-                    risk_score = p.get('risk_score', 0)
-                except:
-                    pass
-            actions.append({
-                'log_id': r['log_id'],
-                'meter_id': r['target_entity'],
-                'actor': r['actor'],
-                'action_type': r['action_type'],
-                'target_entity': r['target_entity'],
-                'risk_score': risk_score or 0,
-                'rate_limit_ip': r['rate_limit_ip'] or '',
-                'rate_limit_applied': r['rate_limit_applied'],
-                'email_sent': r['email_sent'],
-                'webhook_sent': r['webhook_sent'],
-                'timestamp': r['created_at'].isoformat() if r['created_at'] else ''
-            })
-        return jsonify({'actions': actions})
-    except Exception as e:
-        return jsonify({'actions': [], 'error': str(e)})
-
 if __name__ == '__main__':
     print("="*55)
     print("  GRID GUARD — Flask Web Application")
