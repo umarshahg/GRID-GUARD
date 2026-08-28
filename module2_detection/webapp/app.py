@@ -422,7 +422,7 @@ def api_actions_parsed():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT log_id, actor, action_type, target_entity, payload, rate_limit_ip, rate_limit_applied, email_sent, webhook_sent, created_at FROM audit_log WHERE action_type = 'RATE_LIMIT' ORDER BY created_at DESC LIMIT 100")
+        cursor.execute("SELECT log_id, actor, action_type, target_entity, payload, rate_limit_ip, rate_limit_applied, email_sent, webhook_sent, created_at FROM audit_log WHERE action_type IN ('RATE_LIMIT', 'ALERT') AND rate_limit_ip IS NOT NULL AND rate_limit_ip != '' ORDER BY created_at DESC LIMIT 100")
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
