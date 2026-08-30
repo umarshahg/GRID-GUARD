@@ -424,38 +424,34 @@ def api_actions_parsed():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT log_id, actor, action_type, target_entity, payload, rate_limit_ip, rate_limit_applied, email_sent, webhook_sent, created_at FROM audit_log WHERE action_type IN ('RATE_LIMIT', 'ALERT') AND rate_limit_ip IS NOT NULL AND rate_limit_ip != '' ORDER BY created_at DESC LIMIT 100")
+        cursor.execute("SELECT target_entity, payload, email_sent, webhook_sent FROM audit_log WHERE action_type = 'ALERT' ORDER BY created_at DESC LIMIT 50")
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
+        
         actions = []
         for r in rows:
-            payload = r['payload']
-            risk_score = None
-            if payload:
+            risk_score = 0
+            if r['payload']:
                 try:
-                    import json
-                    p = json.loads(payload) if isinstance(payload, str) else payload
-                    risk_score = p.get('risk_score', 0)
+                    import ast
+                    p = ast.literal_eval(r['payload']) if isinstance(r['payload'], str) else r['payload']
+                    risk_score = float(p.get('risk_score', 0))
                 except:
                     pass
-            actions.append({
-                'log_id': r['log_id'],
-                'meter_id': r['target_entity'],
-                'actor': r['actor'],
-                'action_type': r['action_type'],
-                'target_entity': r['target_entity'],
-                'risk_score': risk_score or 0,
-                'rate_limit_ip': r['rate_limit_ip'] or '',
-                'rate_limit_applied': r['rate_limit_applied'],
-                'email_sent': r['email_sent'],
-                'webhook_sent': r['webhook_sent'],
-                'timestamp': r['created_at'].isoformat() if r['created_at'] else ''
-            })
-        return jsonify({'actions': actions})
+            
+            # Only show Tier 2 (40-80%)
+            if 40 <= risk_score <= 80:
+                actions.append({
+                    'meter_id': r['target_entity'],
+                    'risk_score': round(risk_score, 1),
+                    'email_sent': 'Sent' if r['email_sent'] == True else ('Failed' if r['email_sent'] == False else 'Not attempted'),
+                    'webhook_sent': 'Sent' if r['webhook_sent'] == True else ('Failed' if r['webhook_sent'] == False else 'Not attempted'),
+                })
+        
+        return jsonify({'actions': actions[:10]})
     except Exception as e:
-        return jsonify({'actions': [], 'error': str(e)})
-
+        return jsonify({'error': str(e), 'actions': []})
 if __name__ == '__main__':
     print("="*55)
     print("  GRID GUARD — Flask Web Application")
