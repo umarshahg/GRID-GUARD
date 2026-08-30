@@ -1,0 +1,2 @@
+INFO:redis_state_manager:✅ Redis connected at localhost:6379
+INFO:redis_state_manager:✅ Updated state: EMAIL-TEST → ALERT (risk=60.0%)

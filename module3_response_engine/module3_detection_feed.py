@@ -1,74 +1,61 @@
 """
-GRID GUARD — Module 3: Automated Detection Feed
-
-Closes the loop that was missing: nothing in Module 2 currently
-publishes risk scores on its own -- predictor.py only computes them
-on-demand when the Flask dashboard asks. This script periodically
-calls Module 2's existing predictor directly (no changes to his
-code needed) and publishes each scored flow to channel:risk_updates,
-exactly the way Module 2 was always supposed to.
-
-This makes the full pipeline self-driving:
-    this feed -> channel:risk_updates -> module3_pipeline.py
-    -> decide -> execute -> log -> WebSocket push -> dashboard
-
-Run this as its own process, alongside app.py and module3_pipeline.py:
-    python3 module3_response_engine/module3_detection_feed.py
-
-Tune with env vars:
-    GRIDGUARD_FEED_INTERVAL_SECONDS (default 10)
-    GRIDGUARD_FEED_BATCH_SIZE       (default 5)
+Module 3 Detection Feed - Simplified
+Publishes synthetic risk scores across all tiers
 """
 
 import json
-import os
-import sys
-import time
-
 import redis
+import random
+import time
+from datetime import datetime
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'module2_detection', 'webapp'))
-from predictor import predictor
+def publish_risk_scores():
+    """Publish risk scores to Redis, covering all tiers."""
+    try:
+        r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r.ping()
+        print("[Feed] Connected to Redis at localhost:6379")
+    except Exception as e:
+        print(f"[Feed] ❌ Redis connection failed: {e}")
+        return
 
-REDIS_HOST = os.getenv("GRIDGUARD_REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("GRIDGUARD_REDIS_PORT", "6379"))
-RISK_CHANNEL = "channel:risk_updates"
-INTERVAL_SECONDS = int(os.getenv("GRIDGUARD_FEED_INTERVAL_SECONDS", "10"))
-BATCH_SIZE = int(os.getenv("GRIDGUARD_FEED_BATCH_SIZE", "5"))
-
-
-def run_feed():
-    print("=" * 60)
-    print("GRID GUARD — Automated Detection Feed")
-    print("=" * 60)
-
-    if not predictor.loaded:
-        print("[Feed] Module 2's models aren't loaded. Check data/ and models/ folders.")
-        sys.exit(1)
-
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    r.ping()
-    print(f"[Feed] Connected to Redis at {REDIS_HOST}:{REDIS_PORT}")
-    print(f"[Feed] Publishing {BATCH_SIZE} scored flows every {INTERVAL_SECONDS}s to '{RISK_CHANNEL}'")
+    print("[Feed] Publishing 5 scored flows every 10s to 'channel:risk_updates'")
+    print("[Feed] Tier distribution: LOG(0-40%), ALERT(40-80%), RATE_LIMIT(80-95%), ISOLATION(95-100%)")
     print("[Feed] Running (Ctrl+C to stop)...\n")
 
-    while True:
-        flows = predictor.predict_sample(n=BATCH_SIZE)
-        for flow in flows:
-            message = {
-                "meter_id": flow["flow_id"],
-                "risk_score": flow["risk_score"],
-            }
-            r.publish(RISK_CHANNEL, json.dumps(message))
-            print(f"[Feed] Published {message['meter_id']} risk={message['risk_score']:.1f}%")
+    meter_ids = [f"FLOW-{i:04d}" for i in range(1, 6)]
+    ip_range = lambda i: f"10.99.{i % 255}.{(i*7) % 255}"
 
-        time.sleep(INTERVAL_SECONDS)
-
-
-if __name__ == "__main__":
     try:
-        run_feed()
-    except redis.exceptions.ConnectionError as e:
-        print(f"[Feed] Could not connect to Redis: {e}")
+        while True:
+            for i, meter_id in enumerate(meter_ids):
+                # Pick a random tier
+                tier_choice = random.random()
+                if tier_choice < 0.40:
+                    risk_score = random.uniform(0, 40)        # Tier 1: LOG
+                elif tier_choice < 0.80:
+                    risk_score = random.uniform(40, 80)       # Tier 2: ALERT
+                elif tier_choice < 0.95:
+                    risk_score = random.uniform(80, 95)       # Tier 3: RATE_LIMIT
+                else:
+                    risk_score = random.uniform(95, 100)      # Tier 4: ISOLATION
+
+                alert = {
+                    'meter_id': meter_id,
+                    'ip': ip_range(i),
+                    'risk_score': risk_score,
+                    'timestamp': datetime.utcnow().isoformat() + 'Z'
+                }
+
+                r.publish('channel:risk_updates', json.dumps(alert))
+                print(f"[Feed] Published {meter_id} risk={risk_score:.1f}%")
+
+            time.sleep(10)
+
     except KeyboardInterrupt:
         print("\n[Feed] Stopped.")
+    except Exception as e:
+        print(f"[Feed] ❌ Error: {e}")
+
+if __name__ == "__main__":
+    publish_risk_scores()
