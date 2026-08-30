@@ -445,8 +445,8 @@ def api_actions_parsed():
                 actions.append({
                     'meter_id': r['target_entity'],
                     'risk_score': round(risk_score, 1),
-                    'email_sent': 'Sent' if r['email_sent'] == True else ('Failed' if r['email_sent'] == False else 'Not attempted'),
-                    'webhook_sent': 'Sent' if r['webhook_sent'] == True else ('Failed' if r['webhook_sent'] == False else 'Not attempted'),
+                    'email_sent': 'Sent' if r['email_sent'] else 'Failed',
+                    'webhook_sent': 'Sent' if r['webhook_sent'] else 'Failed',
                 })
         
         return jsonify({'actions': actions[:10]})
