@@ -422,34 +422,35 @@ def get_module4_stats_m4():
 @app.route('/api/actions/parsed', methods=['GET'])
 def api_actions_parsed():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT target_entity, payload, email_sent, webhook_sent FROM audit_log WHERE action_type = 'ALERT' ORDER BY created_at DESC LIMIT 50")
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        
+        limit = min(int(request.args.get('limit', 100)), 500)
+        rows = db_logger.get_recent_actions(limit=limit)
+
         actions = []
         for r in rows:
-            risk_score = 0
-            if r['payload']:
+            risk_score = None
+            if r.get('payload'):
                 try:
                     import ast
                     p = ast.literal_eval(r['payload']) if isinstance(r['payload'], str) else r['payload']
-                    risk_score = float(p.get('risk_score', 0))
-                except:
+                    risk_score = round(float(p.get('risk_score', 0)), 1)
+                except Exception:
                     pass
-            
-            # Only show Tier 2 (40-80%)
-            if 40 <= risk_score <= 80:
-                actions.append({
-                    'meter_id': r['target_entity'],
-                    'risk_score': round(risk_score, 1),
-                    'email_sent': 'Sent' if r['email_sent'] else 'Failed',
-                    'webhook_sent': 'Sent' if r['webhook_sent'] else 'Failed',
-                })
-        
-        return jsonify({'actions': actions[:10]})
+
+            actions.append({
+                'meter_id': r.get('meter_id'),
+                'action_type': r.get('action_type'),
+                'risk_score': risk_score,
+                # Keep these as real booleans (or None) — the frontend's
+                # statusBadge()/firewallStatusBadge() switch on strict
+                # true/false/null, not on pre-rendered strings.
+                'email_sent': r.get('email_sent'),
+                'webhook_sent': r.get('webhook_sent'),
+                'rate_limit_ip': r.get('rate_limit_ip'),
+                'rate_limit_applied': r.get('rate_limit_applied'),
+                'created_at': r.get('created_at'),
+            })
+
+        return jsonify({'actions': actions})
     except Exception as e:
         return jsonify({'error': str(e), 'actions': []})
 if __name__ == '__main__':
@@ -477,4 +478,3 @@ if __name__ == '__main__':
 # ══════════════════════════════════════════════════════════════
 # MODULE 4: SANDBOXING & ISOLATION
 # ══════════════════════════════════════════════════════════════
-
