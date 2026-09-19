@@ -1,0 +1,32 @@
+FROM python:3.11-slim
+
+RUN pip install scapy pymodbus
+
+# Simple DLMS/COSEM meter simulator
+RUN cat > /meter.py << 'PYTHON'
+import socket
+import time
+import random
+
+def run_meter():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(('0.0.0.0', 4059))
+    sock.listen(1)
+    print("[Meter] Listening on port 4059")
+    
+    while True:
+        conn, addr = sock.accept()
+        print(f"[Meter] Connection from {addr}")
+        
+        # Simulate meter response
+        data = f"Meter Data: {random.randint(100, 500)}kWh\n".encode()
+        conn.send(data)
+        conn.close()
+        time.sleep(random.uniform(0.5, 2))
+
+if __name__ == "__main__":
+    run_meter()
+PYTHON
+
+CMD ["python", "/meter.py"]
