@@ -422,6 +422,30 @@ def get_module4_stats_m4():
 @app.route('/api/actions/parsed', methods=['GET'])
 def api_actions_parsed():
     try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT target_entity, payload, email_sent, webhook_sent FROM audit_log WHERE action_type = 'ALERT' ORDER BY created_at DESC LIMIT 10")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        actions = []
+        for r in rows:
+            risk_score = 0
+            if r['payload']:
+                try:
+                    import ast
+                    p = ast.literal_eval(r['payload']) if isinstance(r['payload'], str) else r['payload']
+                    risk_score = float(p.get('risk_score', 0))
+                except:
+                    pass
+            if 40 <= risk_score <= 80:
+                actions.append({'meter_id': r['target_entity'], 'risk_score': round(risk_score, 1), 'email_sent': 'Sent' if r['email_sent'] else 'Failed', 'webhook_sent': 'Sent' if r['webhook_sent'] else 'Failed'})
+        return jsonify({'actions': actions[:5]})
+    except Exception as e:
+        return jsonify({'error': str(e), 'actions': []})
+
+def api_actions_parsed():
+    try:
         limit = min(int(request.args.get('limit', 100)), 500)
         rows = db_logger.get_recent_actions(limit=limit)
 
