@@ -1,480 +1,113 @@
+from flask import Flask, jsonify, render_template, request
+from flask_socketio import SocketIO, emit
+import redis
 import json
-# webapp/app.py
-# ─────────────────────────────────────────────────────────────
-# Flask backend — serves HTML pages and REST API endpoints
-# that the frontend JavaScript calls to get live model data.
-# ─────────────────────────────────────────────────────────────
-
-import sys
+import psycopg2
+from psycopg2.extras import RealDictCursor
 import os
 from datetime import datetime
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from flask import (
-    Flask, render_template, jsonify,
-    request, session, redirect, url_for
-)
-from functools import wraps
-from predictor import predictor
-
-# ── Module 3 integration ────────────────────────────────────────
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'module3_response_engine'))
-from module3_step4_database_logger import DatabaseLogger
-
-db_logger = DatabaseLogger()
-db_logger.connect()   # logs its own success/failure; app still runs if this fails
-
-from redis_state_manager import RedisStateManager
-from prometheus_client import Counter, Gauge, generate_latest, REGISTRY
-
-state_manager = RedisStateManager()
-
-isolated_gauge = Gauge('gridguard_isolated_meters_current', 'Currently isolated meters')
-avg_risk_gauge = Gauge('gridguard_average_risk_score', 'Average risk score across meters')
-critical_gauge = Gauge('gridguard_critical_meters', 'Meters above critical risk threshold')
-
-import threading
-import json as json_module
-import redis
-from flask_socketio import SocketIO, emit
-
-DASHBOARD_CHANNEL = "channel:alerts"
-
-
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'secret'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 def get_db_connection():
-    try:
-        import psycopg2
-        from psycopg2.extras import RealDictCursor
-        conn = psycopg2.connect(
-            host="localhost",
-            database="gridguard",
-            user="gridguard",
-            password=os.getenv("DB_PASSWORD", "gridguard"),
-            port=5432,
-            cursor_factory=RealDictCursor
-        )
-        return conn
-    except Exception as e:
-        print(f"DB connection error: {e}")
-        return None
+    return psycopg2.connect(
+        host='localhost',
+        database='gridguard',
+        user='gridguard',
+        password='gridguard',
+        port=5432,
+        cursor_factory=RealDictCursor
+    )
 
-def background_redis_listener(socketio_instance):
-    """Relays Module 3's pipeline notifications to connected browsers."""
-    r = redis.Redis(host="localhost", port=6379, decode_responses=True)
-    pubsub = r.pubsub()
-    pubsub.subscribe(DASHBOARD_CHANNEL)
-    print(f"[WebSocket] Listening for dashboard notifications on '{DASHBOARD_CHANNEL}'...")
-    for message in pubsub.listen():
-        if message["type"] != "message":
-            continue
-        try:
-            data = json_module.loads(message["data"])
-            socketio_instance.emit("new_response", data)
-            print(f"[WebSocket] Pushed to dashboard: {data}")
-        except Exception as e:
-            print(f"[WebSocket] Error relaying message: {e}")
-# ─────────────────────────────────────────────────────────────
-
-# ── App Setup ──────────────────────────────────────────────────
-app = Flask(__name__)
-app.secret_key = 'gridguard-secret-key-2024'
-
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
-
-# ── Hardcoded credentials (no DB needed for FYP demo) ─────────
-USERS = {
-    "admin@gridguard.com": {
-        "password": "gridguard123",
-        "name":     "System Administrator",
-        "role":     "Administrator"
-    },
-    "operator@gridguard.com": {
-        "password": "operator123",
-        "name":     "Security Operator",
-        "role":     "Operator"
-    },
-    "analyst@gridguard.com": {
-        "password": "analyst123",
-        "name":     "Security Analyst",
-        "role":     "Analyst"
-    }
-}
-
-# ── Auth Decorator ─────────────────────────────────────────────
-def login_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if 'user' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated
-
-
-# ══════════════════════════════════════════════════════════════
-#  PAGE ROUTES — serve HTML templates
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/', methods=['GET'])
+@app.route('/')
 def index():
-    if 'user' in session:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
-
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        email    = request.form.get('email', '').strip()
-        password = request.form.get('password', '').strip()
-
-        if email in USERS and USERS[email]['password'] == password:
-            session['user'] = {
-                'email': email,
-                'name':  USERS[email]['name'],
-                'role':  USERS[email]['role'],
-            }
-            return redirect(url_for('dashboard'))
-        else:
-            error = 'Invalid email or password.'
-
-    return render_template('login.html', error=error)
-
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-
-@app.route('/dashboard')
-def dashboard():
-    return render_template(
-        'dashboard.html',
-        user=session['user']
-    )
-
-
-@app.route('/traffic')
-def traffic():
-    return render_template(
-        'traffic.html',
-        user=session['user']
-    )
-
-
-@app.route('/botnet')
-def botnet():
-    return render_template(
-        'botnet.html',
-        user=session['user']
-    )
-
-
-# ── Module 3 — IDS/IPS Responses page ──────────────────────
-@app.route('/ids-ips')
-def ids_ips():
-    return render_template(
-        'ids_ips.html',
-        user=session['user']
-    )
-# ─────────────────────────────────────────────────────────────
-
-
-# ══════════════════════════════════════════════════════════════
-#  API ROUTES — called by JavaScript via fetch()
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/api/status')
-def api_status():
-    return jsonify({
-        "status":        "online" if predictor.loaded else "offline",
-        "models_loaded": predictor.loaded,
-        "feature_count": len(predictor.features) if predictor.features else 0,
-        "test_rows":     len(predictor.X_test) if predictor.X_test is not None else 0,
-    })
-
-
-@app.route('/api/summary')
-def api_summary():
-    try:
-        data = predictor.get_summary()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/traffic')
-def api_traffic():
-    try:
-        data = predictor.get_traffic_stats()
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/flows')
-def api_flows():
-    try:
-        n    = min(int(request.args.get('n', 50)), 200)
-        data = predictor.predict_sample(n=n)
-        return jsonify({"flows": data, "count": len(data)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/scan', methods=['POST'])
-def api_scan():
-    try:
-        body     = request.get_json(silent=True) or {}
-        meter_id = body.get('meter_id', None)
-        data     = predictor.scan_meter(meter_id=meter_id)
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/timeline')
-def api_timeline():
-    try:
-        summary  = predictor.get_summary()
-        return jsonify({
-            "timeline": summary.get("timeline", []),
-            "count":    len(summary.get("timeline", []))
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/features')
-def api_features():
-    try:
-        summary = predictor.get_summary()
-        return jsonify(summary.get("feature_importance", {}))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/histogram')
-def api_histogram():
-    try:
-        summary = predictor.get_summary()
-        return jsonify(summary.get("histogram", {}))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route('/api/user')
-def api_user():
-    return jsonify(session.get('user', {}))
-
-
-# ══════════════════════════════════════════════════════════════
-#  MODULE 3 API ROUTES — IDS/IPS Responses
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/api/response-log')
-def api_response_log():
-    if not db_logger.connected:
-        return jsonify({"error": "Database not connected", "actions": [], "count": 0}), 503
-
-    limit = min(int(request.args.get('limit', 50)), 500)
-    actions = db_logger.get_recent_actions(limit=limit)
-
-    TIER_BY_ACTION = {"LOG": 1, "ALERT": 2, "RATE_LIMIT": 3, "FULL_ISOLATION": 4}
-    for a in actions:
-        a["tier"] = TIER_BY_ACTION.get(a.get("action_type"), None)
-        a["risk_score"] = None
-        a["description"] = ""
-        try:
-            import ast
-            payload = ast.literal_eval(a.get("payload", "{}")) if a.get("payload") else {}
-            a["risk_score"] = payload.get("risk_score")
-            a["description"] = payload.get("description", "")
-        except Exception:
-            pass
-
-    return jsonify({"actions": actions, "count": len(actions)})
-
-
-@app.route('/api/response-counts')
-def api_response_counts():
-    """Returns count of actions per tier, for the summary cards."""
-    if not db_logger.connected:
-        return jsonify({"error": "Database not connected", "counts": {}}), 503
-
-    counts = db_logger.get_action_counts()
-    return jsonify({"counts": counts, "total": sum(counts.values())})
-
-
-# ══════════════════════════════════════════════════════════════
-#  MODULE 3 — FE-5: STATE MANAGEMENT ENDPOINTS
-# ══════════════════════════════════════════════════════════════
-
-@app.route('/api/module3/meter-state/<meter_id>', methods=['GET'])
-def get_meter_state(meter_id):
-    try:
-        state = state_manager.get_meter_state(meter_id)
-        if state:
-            return jsonify({'status': 'success', 'meter_id': meter_id, 'state': state})
-        return jsonify({'status': 'not_found', 'message': f'No state for {meter_id}'}), 404
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@app.route('/api/module3/all-meter-states', methods=['GET'])
-def get_all_meter_states():
-    try:
-        states = state_manager.get_all_meter_states()
-        return jsonify({'status': 'success', 'total': len(states), 'states': states})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@app.route('/api/module3/system-metrics', methods=['GET'])
-def get_system_metrics():
-    try:
-        metrics = state_manager.get_system_metrics()
-        return jsonify({'status': 'success', 'metrics': metrics})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@app.route('/api/module3/isolated-meters', methods=['GET'])
-def get_isolated_meters():
-    try:
-        isolated = state_manager.get_isolated_meters()
-        states = {mid: state_manager.get_meter_state(mid) for mid in isolated}
-        return jsonify({'status': 'success', 'count': len(isolated), 'isolated_meters': states})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-
-@app.route('/metrics', methods=['GET'])
-def prometheus_metrics():
-    metrics = state_manager.get_system_metrics()
-    isolated_gauge.set(metrics.get('isolation_count', 0))
-    avg_risk_gauge.set(metrics.get('average_risk_score', 0))
-    critical_gauge.set(metrics.get('critical_count', 0))
-    return generate_latest(REGISTRY), 200, {'Content-Type': 'text/plain'}
-
-
-# ══════════════════════════════════════════════════════════════
-#  RUN
-# ══════════════════════════════════════════════════════════════
-@app.route("/sandbox")
-def sandbox():
-    return render_template("module4_sandbox.html", user=session["user"])
-
-@app.route("/api/module4/quarantined-meters", methods=["GET"])
-def get_quarantined_meters_m4():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Database not connected"}), 503
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT meter_id, ip_address, state, last_updated FROM meters WHERE state = 'QUARANTINE' ORDER BY last_updated DESC")
-        meters = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return jsonify([dict(m) for m in meters])
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/module4/release/<meter_id>", methods=["POST"])
-def release_meter_m4(meter_id):
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Database not connected"}), 503
-    try:
-        data = request.get_json()
-        analyst_notes = data.get("notes", "") if data else ""
-        cursor = conn.cursor()
-        cursor.execute("UPDATE meters SET state = %s, last_updated = %s WHERE meter_id = %s", ("NORMAL", datetime.now(), meter_id))
-        cursor.execute("INSERT INTO audit_log (actor, action_type, target_entity, payload, created_at) VALUES (%s, %s, %s, %s, %s)", (session["user"]["email"], "RELEASE", meter_id, json.dumps({"action": "RELEASE", "notes": analyst_notes}), datetime.now()))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return jsonify({"status": "released", "meter_id": meter_id, "timestamp": datetime.now().isoformat()})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/module4/stats", methods=["GET"])
-def get_module4_stats_m4():
-    conn = get_db_connection()
-    if not conn:
-        return jsonify({"error": "Database not connected"}), 503
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) as count FROM meters WHERE state = 'QUARANTINE'")
-        isolation_count = cursor.fetchone()["count"]
-        cursor.execute("SELECT COUNT(*) as count FROM audit_log WHERE action_type = 'RELEASE' AND DATE(created_at) = CURRENT_DATE")
-        released_count = cursor.fetchone()["count"]
-        cursor.close()
-        conn.close()
-        return jsonify({"isolation_count": isolation_count, "dnat_count": isolation_count, "pcap_count": isolation_count, "released_count": released_count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
+    return render_template('ids_ips.html')
 
 @app.route('/api/actions/parsed', methods=['GET'])
 def api_actions_parsed():
+    """Tier 2 ALERT flows (40-80%) with email/webhook status"""
     try:
-        limit = min(int(request.args.get('limit', 100)), 500)
-        rows = db_logger.get_recent_actions(limit=limit)
-
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT target_entity, payload, email_sent, webhook_sent, created_at 
+            FROM audit_log 
+            WHERE action_type = 'ALERT' 
+            ORDER BY created_at DESC 
+            LIMIT 10
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
         actions = []
         for r in rows:
-            risk_score = None
-            if r.get('payload'):
+            risk_score = 0
+            if r['payload']:
                 try:
                     import ast
                     p = ast.literal_eval(r['payload']) if isinstance(r['payload'], str) else r['payload']
-                    risk_score = round(float(p.get('risk_score', 0)), 1)
-                except Exception:
+                    risk_score = float(p.get('risk_score', 0))
+                except:
                     pass
+            
+            if 40 <= risk_score <= 80:
+                email_status = 'Sent' if r['email_sent'] else 'Failed'
+                webhook_status = 'Sent' if r['webhook_sent'] else 'Failed'
+                
+                actions.append({
+                    'meter_id': r['target_entity'],
+                    'risk_score': round(risk_score, 1),
+                    'email_sent': email_status,
+                    'webhook_sent': webhook_status,
+                })
+        
+        return jsonify({'actions': actions[:5]})
+    except Exception as e:
+        return jsonify({'error': str(e), 'actions': []})
 
-            actions.append({
-                'meter_id': r.get('meter_id'),
-                'action_type': r.get('action_type'),
-                'risk_score': risk_score,
-                # Keep these as real booleans (or None) — the frontend's
-                # statusBadge()/firewallStatusBadge() switch on strict
-                # true/false/null, not on pre-rendered strings.
-                'email_sent': r.get('email_sent'),
-                'webhook_sent': r.get('webhook_sent'),
-                'rate_limit_ip': r.get('rate_limit_ip'),
-                'rate_limit_applied': r.get('rate_limit_applied'),
-                'created_at': r.get('created_at'),
-            })
-
+@app.route('/api/rate-limits', methods=['GET'])
+def api_rate_limits():
+    """Tier 3 RATE_LIMIT flows (80-95%) with real IPs"""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT target_entity, payload, rate_limit_ip 
+            FROM audit_log 
+            WHERE action_type = 'RATE_LIMIT' 
+            AND rate_limit_ip IS NOT NULL 
+            AND rate_limit_ip != 'None'
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        
+        actions = []
+        for r in rows:
+            risk_score = 0
+            if r['payload']:
+                try:
+                    import ast
+                    p = ast.literal_eval(r['payload']) if isinstance(r['payload'], str) else r['payload']
+                    risk_score = float(p.get('risk_score', 0))
+                except:
+                    pass
+            
+            if 80 <= risk_score <= 95:
+                actions.append({
+                    'meter_id': r['target_entity'],
+                    'risk_score': round(risk_score, 1),
+                    'rate_limit_ip': r['rate_limit_ip'],
+                })
+        
         return jsonify({'actions': actions})
     except Exception as e:
         return jsonify({'error': str(e), 'actions': []})
+
 if __name__ == '__main__':
-    print("="*55)
-    print("  GRID GUARD — Flask Web Application")
-    print("="*55)
-    print(f"  Models loaded : {predictor.loaded}")
-    print(f"  Test rows     : {len(predictor.X_test) if predictor.X_test is not None else 0:,}")
-    print(f"  DB connected  : {db_logger.connected}")
-    print()
-    print("  Open in browser: http://127.0.0.1:5000")
-    print("="*55)
-    print()
-    print("  Login credentials:")
-    print("  admin@gridguard.com    / gridguard123")
-    print("  operator@gridguard.com / operator123")
-    print("  analyst@gridguard.com  / analyst123")
-    print("="*55)
-
-    listener_thread = threading.Thread(target=background_redis_listener, args=(socketio,), daemon=True)
-    listener_thread.start()
-
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
-
-# ══════════════════════════════════════════════════════════════
-# MODULE 4: SANDBOXING & ISOLATION
-# ══════════════════════════════════════════════════════════════
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
