@@ -178,3 +178,17 @@ socket.on("new_response", (data) => {
 socket.on("disconnect", () => {
     console.log("[WebSocket] Disconnected — falling back to polling only");
 });
+
+// Fetch rate limits
+fetch('/api/rate-limits')
+    .then(r => r.json())
+    .then(data => {
+        const tbody = document.querySelector('table tbody');
+        if (tbody && data.actions) {
+            data.actions.forEach(a => {
+                const row = tbody.insertRow();
+                row.innerHTML = `<td>${a.meter_id}</td><td>${a.risk_score}%</td><td>${a.rate_limit_ip}</td><td>Active</td>`;
+            });
+        }
+    });
+

@@ -210,5 +210,29 @@
   </div>
 </div>
 <script src="{{ url_for('static', filename='js/ids_ips.js') }}"></script>
+
+<script>
+fetch('/api/rate-limits').then(r => r.json()).then(d => {
+    const tbody = document.getElementById('rate-limit-table-body');
+    if (d.actions && d.actions.length > 0) {
+        tbody.innerHTML = d.actions.map(a => 
+            `<tr><td>${a.meter_id}</td><td>${a.risk_score}%</td><td>${a.rate_limit_ip}</td><td>Active</td></tr>`
+        ).join('');
+    }
+});
+</script>
+
+
+<script>
+fetch('/api/rate-limits').then(r => r.json()).then(d => {
+    const tbody = document.getElementById('rate-limit-table-body');
+    if (d.actions && d.actions.length > 0) {
+        tbody.innerHTML = d.actions.map(a => 
+            `<tr><td>${a.meter_id}</td><td>${a.risk_score}%</td><td>${a.rate_limit_ip}</td><td>Active</td></tr>`
+        ).join('');
+    }
+});
+</script>
+
 </body>
 </html>
